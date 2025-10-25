@@ -6,35 +6,27 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const { title, description, duration, lessons, creatorAddress } = req.body;
+    const { courseId, studentAddress, proofOfCompletion } = req.body;
 
-    // Валидация
-    if (!title || !description || !lessons || !creatorAddress) {
+    if (!courseId || !studentAddress) {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
-    if (!Array.isArray(lessons) || lessons.length === 0) {
-      return res.status(400).json({ error: "At least one lesson is required" });
-    }
-
-    console.log("📤 Proxying to Backend: Creating course");
-    console.log("📤 Title:", title);
-    console.log("📤 Creator:", creatorAddress);
-    console.log("📤 Lessons:", lessons.length);
+    console.log("📤 Proxying to Backend: Submitting for verification");
+    console.log("📤 Course ID:", courseId);
+    console.log("📤 Student:", studentAddress);
 
     // Отправляем запрос в Backend
     const backendUrl = process.env.BACKEND_URL || "http://localhost:3001";
-    const backendResponse = await fetch(`${backendUrl}/api/courses/create`, {
+    const backendResponse = await fetch(`${backendUrl}/api/courses/submit-verification`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        title: title.trim(),
-        description: description.trim(),
-        duration: duration || null,
-        lessons,
-        creatorAddress,
+        courseId,
+        studentAddress,
+        proofOfCompletion,
       }),
     });
 
@@ -48,11 +40,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     res.status(200).json({
       success: true,
-      course: backendData.data.course,
-      message: "Course created successfully",
+      message: backendData.message,
+      verificationRequest: backendData.data.verificationRequest,
     });
   } catch (error: any) {
-    console.error("❌ Error creating course:", error);
+    console.error("❌ Error submitting for verification:", error);
     res.status(500).json({ error: error.message || "Internal server error" });
   }
 }

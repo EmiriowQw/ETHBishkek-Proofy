@@ -6,18 +6,26 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    // Call backend API
-    const backendUrl = process.env.BACKEND_URL || "http://localhost:3001";
-    const response = await fetch(`${backendUrl}/api/verification/requests`);
+    console.log("📤 Proxying to Backend: Fetching verification requests");
 
-    if (!response.ok) {
-      return res.status(response.status).json({ error: "Failed to fetch verification requests" });
+    // Получаем запросы из Backend
+    const backendUrl = process.env.BACKEND_URL || "http://localhost:3001";
+    const backendResponse = await fetch(`${backendUrl}/api/verification/requests`);
+
+    const backendData = await backendResponse.json();
+
+    console.log(`✅ Backend Response: Found ${backendData.requests?.length || 0} requests`);
+
+    if (!backendResponse.ok) {
+      throw new Error(backendData.error || "Backend request failed");
     }
 
-    const data = await response.json();
-    res.status(200).json(data);
+    res.status(200).json({
+      success: true,
+      requests: backendData.requests || [],
+    });
   } catch (error: any) {
-    console.error("Error fetching verification requests:", error);
+    console.error("❌ Error fetching verification requests:", error);
     res.status(500).json({ error: error.message || "Internal server error" });
   }
 }

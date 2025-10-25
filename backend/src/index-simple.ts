@@ -34,10 +34,10 @@ app.post("/api/courses/create", (req, res) => {
     const { title, description, duration, lessons, creatorAddress } = req.body;
     
     const newCourse = {
-      id: `course-${Date.now()}`,
+      id: `course_${Date.now()}`,
       title,
       description,
-      duration: duration || "Not specified",
+      duration: duration || null,
       lessons: lessons,
       lessonsCount: lessons.length,
       creatorAddress,
@@ -47,12 +47,19 @@ app.post("/api/courses/create", (req, res) => {
 
     mockCourses.push(newCourse);
 
+    console.log(`🎓 [BACKEND] Course created: ${newCourse.id}`);
+    console.log(`🎓 [BACKEND] Title: ${title}`);
+    console.log(`🎓 [BACKEND] Creator: ${creatorAddress}`);
+    console.log(`🎓 [BACKEND] Lessons: ${lessons.length}`);
+    console.log(`🎓 [BACKEND] Total courses in DB: ${mockCourses.length}`);
+
     res.json({
       success: true,
       data: { course: newCourse },
       message: "Course created successfully",
     });
   } catch (error: any) {
+    console.error(`❌ [BACKEND] Error creating course:`, error);
     res.status(500).json({
       success: false,
       error: error.message || "Failed to create course",
@@ -73,6 +80,11 @@ app.get("/api/courses/my-courses", (req, res) => {
   const userCourses = mockCourses.filter(
     c => c.creatorAddress.toLowerCase() === (address as string).toLowerCase()
   );
+
+  console.log(`📚 [BACKEND] Fetching courses for: ${address}`);
+  console.log(`📚 [BACKEND] Found: ${userCourses.length} courses`);
+  console.log(`📚 [BACKEND] Total courses in DB: ${mockCourses.length}`);
+  console.log(`📚 [BACKEND] Courses:`, userCourses.map(c => ({ id: c.id, title: c.title, status: c.status })));
 
   res.json({
     success: true,
@@ -177,9 +189,9 @@ app.get("/api/certificates/user/:userId", (req, res) => {
 });
 
 // API Routes for Verification
-app.post("/api/courses/submit", (req, res) => {
+app.post("/api/courses/submit-verification", (req, res) => {
   try {
-    const { courseId, studentAddress } = req.body;
+    const { courseId, studentAddress, proofOfCompletion } = req.body;
     
     const course = mockCourses.find(c => c.id === courseId);
     if (!course) {
@@ -195,17 +207,23 @@ app.post("/api/courses/submit", (req, res) => {
 
     // Create verification request
     const verificationRequest = {
-      id: `verify-${Date.now()}`,
+      id: `req_${Date.now()}`,
       courseId,
       courseTitle: course.title,
+      courseDescription: course.description || "",
       studentAddress,
-      studentName: studentAddress.slice(0, 6) + "..." + studentAddress.slice(-4),
       lessonsCount: course.lessonsCount,
+      proofOfCompletion: proofOfCompletion || "Course completed",
       submittedAt: new Date().toISOString(),
       status: "pending",
     };
 
     mockVerificationRequests.push(verificationRequest);
+
+    console.log(`📋 [BACKEND] Verification request created: ${verificationRequest.id}`);
+    console.log(`📋 [BACKEND] Course: ${course.title}`);
+    console.log(`📋 [BACKEND] Student: ${studentAddress}`);
+    console.log(`📋 [BACKEND] Total pending requests: ${mockVerificationRequests.filter(r => r.status === 'pending').length}`);
 
     res.json({
       success: true,
@@ -213,6 +231,7 @@ app.post("/api/courses/submit", (req, res) => {
       data: { verificationRequest },
     });
   } catch (error: any) {
+    console.error(`❌ [BACKEND] Error submitting for verification:`, error);
     res.status(500).json({
       success: false,
       error: error.message || "Failed to submit course",
@@ -223,6 +242,10 @@ app.post("/api/courses/submit", (req, res) => {
 app.get("/api/verification/requests", (req, res) => {
   const pendingRequests = mockVerificationRequests.filter(r => r.status === "pending");
   
+  console.log(`🔍 [BACKEND] Fetching verification requests`);
+  console.log(`🔍 [BACKEND] Total requests: ${mockVerificationRequests.length}`);
+  console.log(`🔍 [BACKEND] Pending requests: ${pendingRequests.length}`);
+  
   res.json({
     success: true,
     requests: pendingRequests,
@@ -232,6 +255,10 @@ app.get("/api/verification/requests", (req, res) => {
 app.post("/api/verification/verify", async (req, res) => {
   try {
     const { requestId, verifierAddress, status, reason } = req.body;
+    
+    console.log(`✅ [BACKEND] Processing verification: ${requestId}`);
+    console.log(`✅ [BACKEND] Status: ${status}`);
+    console.log(`✅ [BACKEND] Verifier: ${verifierAddress}`);
     
     const request = mockVerificationRequests.find(r => r.id === requestId);
     if (!request) {
@@ -255,6 +282,11 @@ app.post("/api/verification/verify", async (req, res) => {
       course.status = status;
       if (status === "verified") {
         course.verifiedAt = new Date().toISOString();
+        console.log(`✅ [BACKEND] Course verified: ${course.title}`);
+      } else if (status === "rejected") {
+        course.rejectedAt = new Date().toISOString();
+        course.rejectionReason = reason;
+        console.log(`❌ [BACKEND] Course rejected: ${course.title}. Reason: ${reason}`);
       }
     }
 

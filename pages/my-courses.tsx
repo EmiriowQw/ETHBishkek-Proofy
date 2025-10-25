@@ -3,6 +3,7 @@ import { useAccount } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useRouter } from "next/router";
 import Link from "next/link";
+import toast from "react-hot-toast";
 
 interface Course {
   id: string;
@@ -14,6 +15,8 @@ interface Course {
   createdAt: Date;
   submittedAt?: Date;
   verifiedAt?: Date;
+  rejectedAt?: Date;
+  rejectionReason?: string;
 }
 
 export default function MyCourses() {
@@ -21,6 +24,10 @@ export default function MyCourses() {
   const [mounted, setMounted] = useState(false);
   const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showSubmitModal, setShowSubmitModal] = useState(false);
+  const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
+  const [proofOfCompletion, setProofOfCompletion] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -36,7 +43,6 @@ export default function MyCourses() {
   const loadCourses = async () => {
     setLoading(true);
     try {
-      // TODO: Call backend API to get user's courses
       const response = await fetch(`/api/courses/my-courses?address=${address}`);
       if (response.ok) {
         const data = await response.json();
@@ -44,21 +50,76 @@ export default function MyCourses() {
       }
     } catch (error) {
       console.error("Error loading courses:", error);
+      toast.error("Failed to load courses");
     } finally {
       setLoading(false);
     }
   };
 
+  const handleSubmitForVerification = async () => {
+    if (!selectedCourse) return;
+
+    if (!proofOfCompletion.trim()) {
+      toast.error("Please provide proof of completion");
+      return;
+    }
+
+    setIsSubmitting(true);
+    toast.loading("Submitting for verification...", { id: "submit" });
+
+    try {
+      const response = await fetch("/api/courses/submit-verification", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          courseId: selectedCourse.id,
+          studentAddress: address,
+          proofOfCompletion: proofOfCompletion.trim(),
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to submit");
+      }
+
+      toast.success("✅ Course submitted for verification!", { id: "submit" });
+      toast.success("You'll be notified when verification is complete", {
+        duration: 5000,
+      });
+
+      setShowSubmitModal(false);
+      setProofOfCompletion("");
+      setSelectedCourse(null);
+      loadCourses();
+    } catch (error: any) {
+      console.error("Error submitting:", error);
+      toast.error(error.message || "Failed to submit", { id: "submit" });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleClaimCertificate = (course: Course) => {
+    toast.success(`Claiming NFT certificate for: ${course.title}`, {
+      duration: 3000,
+    });
+    router.push(`/my-certificates`);
+  };
+
   const getStatusBadge = (status: string) => {
     const badges = {
-      draft: { bg: "bg-gray-100", text: "text-gray-800", label: "Draft" },
-      submitted: { bg: "bg-yellow-100", text: "text-yellow-800", label: "Pending Verification" },
-      verified: { bg: "bg-green-100", text: "text-green-800", label: "Verified ✓" },
-      rejected: { bg: "bg-red-100", text: "text-red-800", label: "Rejected" },
+      draft: { bg: "bg-gray-100", text: "text-gray-800", label: "📝 Draft", icon: "📝" },
+      submitted: { bg: "bg-yellow-100", text: "text-yellow-800", label: "⏳ Pending", icon: "⏳" },
+      verified: { bg: "bg-green-100", text: "text-green-800", label: "✅ Verified", icon: "✅" },
+      rejected: { bg: "bg-red-100", text: "text-red-800", label: "❌ Rejected", icon: "❌" },
     };
     const badge = badges[status as keyof typeof badges] || badges.draft;
     return (
-      <span className={`${badge.bg} ${badge.text} px-2 py-1 rounded text-xs font-medium`}>
+      <span className={`${badge.bg} ${badge.text} px-3 py-1 rounded-full text-sm font-semibold`}>
         {badge.label}
       </span>
     );
@@ -111,7 +172,7 @@ export default function MyCourses() {
               My Courses
             </h2>
             <p className="text-gray-600">
-              Manage your created courses
+              Manage your created courses and track verification status
             </p>
           </div>
           <button
@@ -136,14 +197,14 @@ export default function MyCourses() {
           </div>
         ) : courses.length === 0 ? (
           <div className="card text-center py-12">
-            <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6">
-              <span className="text-4xl">📚</span>
+            <div className="w-24 h-24 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center mx-auto mb-6">
+              <span className="text-5xl">📚</span>
             </div>
             <h3 className="text-2xl font-semibold text-gray-900 mb-3">
               No Courses Yet
             </h3>
             <p className="text-gray-600 mb-6 max-w-md mx-auto">
-              You haven't created any courses yet. Start by creating your first course!
+              You haven't created any courses yet. Create your first course and get verified to receive an NFT certificate!
             </p>
             <button
               onClick={() => router.push('/create-course')}
@@ -155,54 +216,134 @@ export default function MyCourses() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {courses.map((course) => (
-              <div key={course.id} className="card hover:shadow-lg transition-shadow duration-200">
+              <div key={course.id} className="card hover:shadow-xl transition-all duration-200 border-2 border-transparent hover:border-primary-200">
                 <div className="mb-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-xl font-semibold text-gray-900">
+                  <div className="flex items-start justify-between mb-3">
+                    <h3 className="text-xl font-bold text-gray-900 flex-1 mr-2">
                       {course.title}
                     </h3>
                     {getStatusBadge(course.status)}
                   </div>
-                  <p className="text-gray-600 text-sm mb-3">
+                  
+                  <p className="text-gray-600 text-sm mb-4 line-clamp-2">
                     {course.description}
                   </p>
                   
-                  <div className="flex items-center justify-between text-sm text-gray-500 mb-4">
-                    <span>📚 {course.lessonsCount} lessons</span>
-                    {course.duration && <span>⏱️ {course.duration}</span>}
+                  <div className="flex items-center justify-between text-sm text-gray-500 mb-4 pb-4 border-b border-gray-100">
+                    <span className="flex items-center">
+                      <span className="mr-1">📚</span>
+                      {course.lessonsCount} lessons
+                    </span>
+                    {course.duration && (
+                      <span className="flex items-center">
+                        <span className="mr-1">⏱️</span>
+                        {course.duration}
+                      </span>
+                    )}
                   </div>
 
+                  {/* Draft Status */}
                   {course.status === "draft" && (
-                    <button
-                      onClick={() => router.push(`/submit-course/${course.id}`)}
-                      className="w-full btn-primary text-sm"
-                    >
-                      Submit for Verification
-                    </button>
-                  )}
-
-                  {course.status === "submitted" && (
-                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-                      <p className="text-yellow-800 text-sm">
-                        ⏳ Waiting for verification...
-                      </p>
+                    <div className="space-y-2">
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3">
+                        <p className="text-blue-800 text-sm">
+                          💡 Ready to get your certificate? Submit for verification!
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setSelectedCourse(course);
+                          setShowSubmitModal(true);
+                        }}
+                        className="w-full bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white font-semibold py-3 px-4 rounded-lg transition-all duration-200"
+                      >
+                        Submit for Verification →
+                      </button>
                     </div>
                   )}
 
-                  {course.status === "verified" && (
-                    <button
-                      onClick={() => router.push(`/claim-certificate/${course.id}`)}
-                      className="w-full btn-primary text-sm"
-                    >
-                      🎓 Claim NFT Certificate
-                    </button>
+                  {/* Submitted Status */}
+                  {course.status === "submitted" && (
+                    <div className="bg-yellow-50 border-2 border-yellow-200 rounded-lg p-4">
+                      <div className="flex items-center mb-2">
+                        <span className="text-2xl mr-2">⏳</span>
+                        <div>
+                          <p className="text-yellow-900 font-semibold">Under Review</p>
+                          <p className="text-yellow-700 text-sm">
+                            Your course is being verified by our team
+                          </p>
+                        </div>
+                      </div>
+                      {course.submittedAt && (
+                        <p className="text-yellow-600 text-xs mt-2">
+                          Submitted: {new Date(course.submittedAt).toLocaleDateString()}
+                        </p>
+                      )}
+                    </div>
                   )}
 
+                  {/* Verified Status */}
+                  {course.status === "verified" && (
+                    <div className="space-y-2">
+                      <div className="bg-green-50 border-2 border-green-200 rounded-lg p-4 mb-3">
+                        <div className="flex items-center mb-2">
+                          <span className="text-2xl mr-2">✅</span>
+                          <div>
+                            <p className="text-green-900 font-semibold">Verified!</p>
+                            <p className="text-green-700 text-sm">
+                              Your course has been approved
+                            </p>
+                          </div>
+                        </div>
+                        {course.verifiedAt && (
+                          <p className="text-green-600 text-xs mt-2">
+                            Verified: {new Date(course.verifiedAt).toLocaleDateString()}
+                          </p>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => handleClaimCertificate(course)}
+                        className="w-full bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-semibold py-3 px-4 rounded-lg transition-all duration-200 flex items-center justify-center space-x-2"
+                      >
+                        <span>🎓</span>
+                        <span>Claim NFT Certificate</span>
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Rejected Status */}
                   {course.status === "rejected" && (
-                    <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-                      <p className="text-red-800 text-sm">
-                        ❌ Verification rejected. Please review and resubmit.
-                      </p>
+                    <div className="space-y-3">
+                      <div className="bg-red-50 border-2 border-red-200 rounded-lg p-4">
+                        <div className="flex items-start mb-2">
+                          <span className="text-2xl mr-2">❌</span>
+                          <div className="flex-1">
+                            <p className="text-red-900 font-semibold mb-1">Verification Rejected</p>
+                            {course.rejectionReason && (
+                              <p className="text-red-700 text-sm mb-2">
+                                <span className="font-medium">Reason:</span> {course.rejectionReason}
+                              </p>
+                            )}
+                            {course.rejectedAt && (
+                              <p className="text-red-600 text-xs">
+                                Rejected: {new Date(course.rejectedAt).toLocaleDateString()}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => {
+                          toast("Please review the feedback and resubmit after making improvements", {
+                            icon: "💡",
+                          });
+                          setSelectedCourse(course);
+                          setShowSubmitModal(true);
+                        }}
+                        className="w-full bg-gradient-to-r from-orange-500 to-red-600 hover:from-orange-600 hover:to-red-700 text-white font-semibold py-3 px-4 rounded-lg transition-all duration-200"
+                      >
+                        📝 Review & Resubmit
+                      </button>
                     </div>
                   )}
                 </div>
@@ -211,7 +352,90 @@ export default function MyCourses() {
           </div>
         )}
       </div>
+
+      {/* Submit for Verification Modal */}
+      {showSubmitModal && selectedCourse && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+            <div className="p-6">
+              <div className="flex justify-between items-start mb-6">
+                <div>
+                  <h3 className="text-2xl font-bold text-gray-900 mb-2">
+                    Submit for Verification
+                  </h3>
+                  <p className="text-gray-600 text-sm">
+                    Course: <span className="font-semibold">{selectedCourse.title}</span>
+                  </p>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowSubmitModal(false);
+                    setSelectedCourse(null);
+                    setProofOfCompletion("");
+                  }}
+                  className="text-gray-400 hover:text-gray-600 text-2xl"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4 mb-6">
+                <h4 className="font-semibold text-blue-900 mb-2">📋 Verification Process</h4>
+                <ul className="text-sm text-blue-800 space-y-1">
+                  <li>✓ Admin will review your course content</li>
+                  <li>✓ Verification usually takes 24-48 hours</li>
+                  <li>✓ Upon approval, you'll receive an NFT certificate</li>
+                  <li>✓ Certificate minting is gasless!</li>
+                </ul>
+              </div>
+
+              <div className="space-y-4 mb-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Proof of Completion *
+                  </label>
+                  <textarea
+                    value={proofOfCompletion}
+                    onChange={(e) => setProofOfCompletion(e.target.value)}
+                    placeholder="Describe what you learned and accomplished in this course. Include key concepts, projects completed, or skills gained..."
+                    rows={6}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Minimum 50 characters required
+                  </p>
+                </div>
+
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                  <p className="text-amber-900 text-sm">
+                    ⚠️ Make sure all course content is complete and accurate before submitting
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex space-x-3">
+                <button
+                  onClick={() => {
+                    setShowSubmitModal(false);
+                    setSelectedCourse(null);
+                    setProofOfCompletion("");
+                  }}
+                  className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-3 px-4 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSubmitForVerification}
+                  disabled={isSubmitting || proofOfCompletion.trim().length < 50}
+                  className="flex-1 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white font-semibold py-3 px-4 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isSubmitting ? "Submitting..." : "Submit for Verification"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
-

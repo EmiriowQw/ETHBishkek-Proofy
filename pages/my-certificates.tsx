@@ -37,7 +37,7 @@ export default function MyCertificates() {
     try {
       const tokenIds = await getUserCertificates();
       const certificateData = await Promise.all(
-        tokenIds.map(async (tokenId) => {
+        tokenIds.map(async (tokenId: string) => {
           const data = await getCertificateData(tokenId);
           return data ? { tokenId, ...data } : null;
         })

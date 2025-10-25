@@ -113,7 +113,7 @@ router.put("/:id/progress", authenticateUser, async (req: Request, res: Response
       quizScores: quizScores || {},
       totalProgress: totalProgress || 0,
       completed: completed || false,
-      completionDate: completed ? new Date() : null,
+      completionDate: completed ? new Date() : undefined,
     });
 
     res.json({

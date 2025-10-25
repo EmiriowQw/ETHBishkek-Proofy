@@ -35,16 +35,22 @@ export default function CreateCourse() {
   }, []);
 
   const addLesson = () => {
-    if (!newLessonTitle || !newLessonContent) {
-      toast.error("Please fill in lesson title and content");
+    // Валидация урока
+    if (!newLessonTitle || newLessonTitle.trim().length < 3) {
+      toast.error("Lesson title must be at least 3 characters");
+      return;
+    }
+
+    if (!newLessonContent || newLessonContent.trim().length < 50) {
+      toast.error("Lesson content must be at least 50 characters");
       return;
     }
 
     const newLesson: Lesson = {
       id: Date.now().toString(),
-      title: newLessonTitle,
-      description: newLessonDescription,
-      content: newLessonContent,
+      title: newLessonTitle.trim(),
+      description: newLessonDescription.trim(),
+      content: newLessonContent.trim(),
       order: lessons.length + 1,
     };
 
@@ -53,7 +59,7 @@ export default function CreateCourse() {
     setNewLessonDescription("");
     setNewLessonContent("");
     setShowLessonForm(false);
-    toast.success("Lesson added!");
+    toast.success(`📚 Lesson ${lessons.length + 1} added!`);
   };
 
   const removeLesson = (id: string) => {
@@ -64,8 +70,14 @@ export default function CreateCourse() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!courseTitle || !courseDescription) {
-      toast.error("Please fill in all course details");
+    // Валидация
+    if (!courseTitle || courseTitle.trim().length < 5) {
+      toast.error("Course title must be at least 5 characters");
+      return;
+    }
+
+    if (!courseDescription || courseDescription.trim().length < 20) {
+      toast.error("Description must be at least 20 characters");
       return;
     }
 
@@ -74,31 +86,63 @@ export default function CreateCourse() {
       return;
     }
 
+    if (lessons.length < 3) {
+      toast.error("Course should have at least 3 lessons for certification");
+      return;
+    }
+
+    // Проверка что кошелек подключен
+    if (!address) {
+      toast.error("Please connect your wallet first!", { id: "create-course" });
+      return;
+    }
+
     setIsSubmitting(true);
     toast.loading("Creating course...", { id: "create-course" });
 
+    console.log("📚 Creating course with address:", address);
+    console.log("📚 Course data:", {
+      title: courseTitle.trim(),
+      lessonsCount: lessons.length,
+      creatorAddress: address,
+    });
+
     try {
-      // TODO: Call backend API to create course
       const response = await fetch("/api/courses/create", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          title: courseTitle,
-          description: courseDescription,
-          duration: courseDuration,
+          title: courseTitle.trim(),
+          description: courseDescription.trim(),
+          duration: courseDuration.trim() || null,
           lessons: lessons,
           creatorAddress: address,
         }),
       });
 
+      const data = await response.json();
+
+      console.log("✅ API Response:", data);
+
       if (!response.ok) {
-        throw new Error("Failed to create course");
+        throw new Error(data.error || "Failed to create course");
       }
 
-      toast.success("Course created successfully!", { id: "create-course" });
-      router.push("/my-courses");
+      console.log("✅ Course created with ID:", data.course?.id);
+      console.log("✅ Creator address:", data.course?.creatorAddress);
+
+      toast.success("🎉 Course created successfully!", { id: "create-course" });
+      
+      // Показываем информацию о следующих шагах
+      toast.success("Next step: Submit for verification to get your NFT certificate!", {
+        duration: 5000,
+      });
+      
+      setTimeout(() => {
+        router.push("/my-courses");
+      }, 1000);
     } catch (error: any) {
       console.error("Error creating course:", error);
       toast.error(error.message || "Failed to create course", { id: "create-course" });
