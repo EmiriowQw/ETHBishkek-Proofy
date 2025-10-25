@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useAccount } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import Link from "next/link";
@@ -9,15 +9,27 @@ interface Certificate {
   tokenId: string;
   tokenURI: string;
   txHash: string;
-  courseId: string;
-  courseName: string;
-  courseDescription: string;
+  courseId?: string;
+  achievementId?: string;
+  courseName?: string;
+  achievementTitle?: string;
+  courseDescription?: string;
+  achievementDescription?: string;
+  category?: string;
   studentAddress: string;
   studentName: string;
   completionDate: string;
   claimedAt: string;
   network: string;
   gasless: boolean;
+  type?: "course" | "achievement";
+}
+
+interface Category {
+  id: string;
+  name: string;
+  icon: string;
+  color: string;
 }
 
 export default function MyCertificates() {
@@ -25,6 +37,7 @@ export default function MyCertificates() {
   const [certificates, setCertificates] = useState<Certificate[]>([]);
   const [loading, setLoading] = useState(true);
   const [mounted, setMounted] = useState(false);
+  const [categories, setCategories] = useState<Category[]>([]);
 
   useEffect(() => {
     setMounted(true);
@@ -32,11 +45,24 @@ export default function MyCertificates() {
 
   useEffect(() => {
     if (isConnected && address) {
+      loadCategories();
       loadCertificates();
     } else {
       setLoading(false);
     }
   }, [isConnected, address]);
+
+  const loadCategories = useCallback(async () => {
+    try {
+      const response = await fetch('/api/categories');
+      if (response.ok) {
+        const data = await response.json();
+        setCategories(data.categories || []);
+      }
+    } catch (error) {
+      console.error("Error loading categories:", error);
+    }
+  }, []);
 
   const loadCertificates = async () => {
     if (!address) return;
@@ -57,6 +83,36 @@ export default function MyCertificates() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const getCategoryColorClass = (categoryId: string) => {
+    const category = categories.find(cat => cat.id === categoryId);
+    switch (category?.color) {
+      case 'blue': return 'from-blue-500 to-indigo-600';
+      case 'orange': return 'from-orange-500 to-red-600';
+      case 'green': return 'from-green-500 to-emerald-600';
+      case 'purple': return 'from-purple-500 to-pink-600';
+      case 'gray': return 'from-gray-400 to-gray-500';
+      default: return 'from-purple-500 to-indigo-600';
+    }
+  };
+
+  const getCategoryIcon = (categoryId: string) => {
+    const category = categories.find(cat => cat.id === categoryId);
+    return category?.icon || '📌';
+  };
+
+  const getCategoryName = (categoryId: string) => {
+    const category = categories.find(cat => cat.id === categoryId);
+    return category?.name || categoryId;
+  };
+
+  const getCertificateTitle = (cert: Certificate) => {
+    return cert.courseName || cert.achievementTitle || 'Certificate';
+  };
+
+  const getCertificateDescription = (cert: Certificate) => {
+    return cert.courseDescription || cert.achievementDescription || '';
   };
 
   if (!mounted) {
@@ -88,8 +144,8 @@ export default function MyCertificates() {
             <Link href="/" className="text-gray-600 hover:text-primary-600">
               Dashboard
             </Link>
-            <Link href="/my-courses" className="text-gray-600 hover:text-primary-600">
-              My Courses
+            <Link href="/my-achievements" className="text-gray-600 hover:text-primary-600">
+              My Achievements
             </Link>
             <Link href="/verification" className="text-gray-600 hover:text-primary-600">
               Verification
@@ -105,7 +161,7 @@ export default function MyCertificates() {
             My NFT Certificates
           </h2>
           <p className="text-gray-600">
-            Your blockchain-verified course completion certificates
+            Your blockchain-verified achievement and course completion certificates
           </p>
         </div>
 
@@ -129,31 +185,41 @@ export default function MyCertificates() {
               No Certificates Yet
             </h3>
             <p className="text-gray-600 mb-6 max-w-md mx-auto">
-              Complete and verify courses to earn your first NFT certificate. Your certificates will appear here once claimed.
+              Complete and verify achievements to earn your first NFT certificate. Your certificates will appear here once claimed.
             </p>
-            <Link href="/my-courses" className="btn-primary inline-block">
-              View My Courses
+            <Link href="/my-achievements" className="btn-primary inline-block">
+              View My Achievements
             </Link>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {certificates.map((certificate) => (
-              <div key={certificate.id} className="card hover:shadow-xl transition-all duration-200">
-                <div className="bg-gradient-to-br from-purple-500 to-indigo-600 p-6 rounded-t-lg text-white">
-                  <div className="text-center mb-4">
-                    <div className="text-6xl mb-2">🎓</div>
-                    <h3 className="text-xl font-bold">Certificate of Completion</h3>
+              <div key={certificate.id} className="card hover:shadow-xl transition-all duration-200 border-2 border-transparent hover:border-primary-200">
+                <div className={`bg-gradient-to-br ${certificate.category ? getCategoryColorClass(certificate.category) : 'from-purple-500 to-indigo-600'} p-6 rounded-t-lg text-white relative`}>
+                  {certificate.category && (
+                    <div className="absolute top-3 right-3 bg-white/20 backdrop-blur-sm px-3 py-1 rounded-full text-xs font-semibold">
+                      {getCategoryIcon(certificate.category)} {getCategoryName(certificate.category)}
+                    </div>
+                  )}
+                  <div className="text-center pt-4">
+                    <div className="text-6xl mb-2">
+                      {certificate.category ? getCategoryIcon(certificate.category) : '🎓'}
+                    </div>
+                    <h3 className="text-xl font-bold">NFT Certificate</h3>
+                    <p className="text-sm text-white/80 mt-1">
+                      {certificate.type === 'achievement' ? 'Achievement Verified' : 'Course Completed'}
+                    </p>
                   </div>
                 </div>
 
                 <div className="p-6">
                   <h4 className="text-lg font-bold text-gray-900 mb-2">
-                    {certificate.courseName}
+                    {getCertificateTitle(certificate)}
                   </h4>
                   
-                  {certificate.courseDescription && (
+                  {getCertificateDescription(certificate) && (
                     <p className="text-sm text-gray-600 mb-4 line-clamp-2">
-                      {certificate.courseDescription}
+                      {getCertificateDescription(certificate)}
                     </p>
                   )}
 
@@ -162,6 +228,12 @@ export default function MyCertificates() {
                       <span className="text-gray-600">Token ID:</span>
                       <span className="font-mono font-semibold text-primary-600">
                         #{certificate.tokenId}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-600">Type:</span>
+                      <span className="font-medium text-gray-900 capitalize">
+                        {certificate.type === 'achievement' ? '🎯 Achievement' : '📚 Course'}
                       </span>
                     </div>
                     <div className="flex items-center justify-between">

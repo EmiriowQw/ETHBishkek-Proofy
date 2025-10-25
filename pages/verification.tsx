@@ -1,21 +1,34 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useAccount } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import Link from "next/link";
+import { useRouter } from "next/router";
 import toast from "react-hot-toast";
 
 interface VerificationRequest {
   id: string;
-  courseId: string;
-  courseTitle: string;
-  courseDescription: string;
+  courseId?: string;
+  achievementId?: string;
+  title: string;
+  description: string;
+  category?: string;
+  specificData?: any;
   studentAddress: string;
   studentName?: string;
-  lessonsCount: number;
+  lessonsCount?: number;
   proofOfCompletion: string;
   proofImage?: string | null;
   submittedAt: Date;
   status: "pending" | "verified" | "rejected";
+  type: "course" | "achievement";
+}
+
+interface Category {
+  id: string;
+  name: string;
+  icon: string;
+  color: string;
+  description: string;
 }
 
 export default function Verification() {
@@ -27,6 +40,11 @@ export default function Verification() {
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [rejectionReason, setRejectionReason] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('all');
+  const [isVerifier, setIsVerifier] = useState(false);
+  const [verifierCategories, setVerifierCategories] = useState<string[]>([]);
+  const router = useRouter();
 
   useEffect(() => {
     setMounted(true);
@@ -34,14 +52,47 @@ export default function Verification() {
 
   useEffect(() => {
     if (isConnected && address) {
+      loadCategories();
+      checkVerifierStatus();
       loadVerificationRequests();
     }
   }, [isConnected, address]);
 
-  const loadVerificationRequests = async () => {
+  const loadCategories = useCallback(async () => {
+    try {
+      const response = await fetch('/api/categories');
+      if (response.ok) {
+        const data = await response.json();
+        setCategories(data.categories || []);
+      }
+    } catch (error) {
+      console.error("Error loading categories:", error);
+    }
+  }, []);
+
+  const checkVerifierStatus = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/verifiers/my-role?address=${address}`);
+      if (response.ok) {
+        const data = await response.json();
+        console.log("✅ [VERIFIER LOADED]", data);
+        console.log("✅ [VERIFIER CATEGORIES]", data.verifier?.categories);
+        setIsVerifier(data.isVerifier);
+        setVerifierCategories(data.verifier?.categories || []);
+      }
+    } catch (error) {
+      console.error("Error checking verifier status:", error);
+    }
+  }, [address]);
+
+  const loadVerificationRequests = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await fetch("/api/verification/requests");
+      const url = selectedCategoryFilter !== 'all' 
+        ? `/api/verification/requests?category=${selectedCategoryFilter}`
+        : '/api/verification/requests';
+      
+      const response = await fetch(url);
       if (response.ok) {
         const data = await response.json();
         setRequests(data.requests || []);
@@ -52,9 +103,25 @@ export default function Verification() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedCategoryFilter]);
+
+  useEffect(() => {
+    if (isConnected && address) {
+      loadVerificationRequests();
+    }
+  }, [selectedCategoryFilter, isConnected, address, loadVerificationRequests]);
 
   const handleVerify = async (request: VerificationRequest) => {
+    // Check if verifier can verify this category
+    console.log("🔍 [VERIFY CHECK] Request category:", request.category);
+    console.log("🔍 [VERIFY CHECK] Verifier categories:", verifierCategories);
+    console.log("🔍 [VERIFY CHECK] Can verify:", verifierCategories.includes(request.category));
+    
+    if (request.category && !verifierCategories.includes(request.category)) {
+      toast.error(`You are not authorized to verify this category. Your categories: ${verifierCategories.join(', ')}`);
+      return;
+    }
+
     setIsProcessing(true);
     toast.loading("Processing verification...", { id: "verify" });
 
@@ -66,6 +133,8 @@ export default function Verification() {
         },
         body: JSON.stringify({
           requestId: request.id,
+          courseId: request.courseId,
+          achievementId: request.achievementId,
           verifierAddress: address,
           status: "verified",
         }),
@@ -77,7 +146,8 @@ export default function Verification() {
         throw new Error(data.error || "Failed to verify");
       }
 
-      toast.success("✅ Course verified! NFT certificate minted successfully.", { id: "verify" });
+      const itemType = request.type === 'achievement' ? 'Achievement' : 'Course';
+      toast.success(`✅ ${itemType} verified! NFT certificate minted successfully.`, { id: "verify" });
       
       if (data.data?.tokenId) {
         toast.success(`🎫 NFT Token ID: ${data.data.tokenId} issued to student`, {
@@ -94,7 +164,7 @@ export default function Verification() {
       setSelectedRequest(null);
     } catch (error: any) {
       console.error("Error verifying:", error);
-      toast.error(error.message || "Failed to verify course", { id: "verify" });
+      toast.error(error.message || "Failed to verify", { id: "verify" });
     } finally {
       setIsProcessing(false);
     }
@@ -119,6 +189,8 @@ export default function Verification() {
         },
         body: JSON.stringify({
           requestId: selectedRequest.id,
+          courseId: selectedRequest.courseId,
+          achievementId: selectedRequest.achievementId,
           verifierAddress: address,
           status: "rejected",
           reason: rejectionReason.trim(),
@@ -145,6 +217,53 @@ export default function Verification() {
     }
   };
 
+  const getCategoryColorClass = (categoryId: string) => {
+    const category = categories.find(cat => cat.id === categoryId);
+    switch (category?.color) {
+      case 'blue': return 'from-blue-500 to-indigo-600';
+      case 'orange': return 'from-orange-500 to-red-600';
+      case 'green': return 'from-green-500 to-emerald-600';
+      case 'purple': return 'from-purple-500 to-pink-600';
+      case 'gray': return 'from-gray-400 to-gray-500';
+      default: return 'from-gray-400 to-gray-500';
+    }
+  };
+
+  const getCategoryIcon = (categoryId: string) => {
+    const category = categories.find(cat => cat.id === categoryId);
+    return category?.icon || '📌';
+  };
+
+  const getCategoryName = (categoryId: string) => {
+    const category = categories.find(cat => cat.id === categoryId);
+    return category?.name || categoryId;
+  };
+
+  const renderSpecificData = (request: VerificationRequest) => {
+    if (!request.specificData || !request.category) return null;
+
+    const data = request.specificData;
+    const category = request.category;
+
+    return (
+      <div className="bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-200 rounded-lg p-4">
+        <h4 className="font-semibold text-indigo-900 mb-3">📋 Category-Specific Details</h4>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {Object.entries(data).map(([key, value]) => (
+            <div key={key} className="bg-white rounded-lg p-3 border border-indigo-100">
+              <p className="text-xs font-medium text-indigo-700 mb-1 capitalize">
+                {key.replace(/([A-Z])/g, ' $1').trim()}:
+              </p>
+              <p className="text-sm text-indigo-900 font-semibold break-words">
+                {String(value)}
+              </p>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
   if (!mounted) {
     return null;
   }
@@ -153,6 +272,9 @@ export default function Verification() {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
+          <div className="w-24 h-24 bg-gradient-to-br from-purple-500 to-pink-600 rounded-full flex items-center justify-center mx-auto mb-6">
+            <span className="text-5xl">🛡️</span>
+          </div>
           <h1 className="text-3xl font-bold text-gray-900 mb-4">
             Connect Your Wallet
           </h1>
@@ -165,17 +287,67 @@ export default function Verification() {
     );
   }
 
+  if (!isVerifier) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <nav className="bg-white shadow-sm border-b">
+          <div className="container mx-auto px-4 py-4 flex justify-between items-center">
+            <h1 className="text-2xl font-bold text-primary-600">Proofy</h1>
+            <div className="flex items-center space-x-4">
+              <Link href="/" className="text-gray-600 hover:text-primary-600">
+                Dashboard
+              </Link>
+              <Link href="/my-achievements" className="text-gray-600 hover:text-primary-600">
+                My Achievements
+              </Link>
+              <ConnectButton />
+            </div>
+          </div>
+        </nav>
+
+        <div className="container mx-auto px-4 py-16">
+          <div className="max-w-2xl mx-auto text-center">
+            <div className="w-24 h-24 bg-gradient-to-br from-purple-500 to-pink-600 rounded-full flex items-center justify-center mx-auto mb-6">
+              <span className="text-5xl">🛡️</span>
+            </div>
+            <h2 className="text-3xl font-bold text-gray-900 mb-4">
+              Become a Verifier
+            </h2>
+            <p className="text-lg text-gray-600 mb-8">
+              You need to be a registered verifier to access this panel. Verifiers help ensure the authenticity of achievements in the Proofy ecosystem.
+            </p>
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-8 text-left">
+              <h3 className="font-bold text-blue-900 mb-3">As a verifier, you can:</h3>
+              <ul className="space-y-2 text-blue-800">
+                <li>✅ Review and approve achievement submissions</li>
+                <li>✅ Ensure quality and authenticity of proofs</li>
+                <li>✅ Help issue NFT certificates</li>
+                <li>✅ Build reputation in your expertise area</li>
+              </ul>
+            </div>
+            <button
+              onClick={() => router.push('/become-verifier')}
+              className="bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 text-white font-bold py-4 px-8 rounded-lg transition-all text-lg"
+            >
+              Register as Verifier →
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       <nav className="bg-white shadow-sm border-b sticky top-0 z-40">
         <div className="container mx-auto px-4 py-4 flex justify-between items-center">
-          <h1 className="text-2xl font-bold text-primary-600">Proofy Admin</h1>
+          <h1 className="text-2xl font-bold text-primary-600">Proofy Verification</h1>
           <div className="flex items-center space-x-4">
             <Link href="/" className="text-gray-600 hover:text-primary-600">
               Dashboard
             </Link>
-            <Link href="/my-courses" className="text-gray-600 hover:text-primary-600">
-              My Courses
+            <Link href="/my-achievements" className="text-gray-600 hover:text-primary-600">
+              My Achievements
             </Link>
             <Link href="/my-certificates" className="text-gray-600 hover:text-primary-600">
               My Certificates
@@ -187,17 +359,64 @@ export default function Verification() {
 
       <div className="container mx-auto px-4 py-8">
         <div className="mb-8">
-          <div className="flex items-center justify-between mb-2">
-            <h2 className="text-3xl font-bold text-gray-900">
-              Verification Requests
-            </h2>
-            <span className="bg-primary-100 text-primary-700 px-4 py-2 rounded-full font-semibold">
-              {requests.length} Pending
-            </span>
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-3xl font-bold text-gray-900 mb-2">
+                Verification Panel
+              </h2>
+              <p className="text-gray-600">
+                Review and verify achievement submissions. Approved achievements receive NFT certificates.
+              </p>
+            </div>
+            <div className="flex items-center space-x-3">
+              <span className="bg-purple-100 text-purple-700 px-4 py-2 rounded-full font-semibold flex items-center">
+                <span className="mr-2">🛡️</span>
+                Verifier
+              </span>
+              <span className="bg-primary-100 text-primary-700 px-4 py-2 rounded-full font-semibold">
+                {requests.length} Pending
+              </span>
+            </div>
           </div>
-          <p className="text-gray-600">
-            Review and verify course completion requests. Verified courses receive NFT certificates.
-          </p>
+
+          {/* Category Filter */}
+          {categories.length > 0 && (
+            <div className="bg-white rounded-lg shadow-sm border p-4 mb-6">
+              <label htmlFor="categoryFilter" className="block text-sm font-medium text-gray-700 mb-3">
+                Filter by Category:
+              </label>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={() => setSelectedCategoryFilter('all')}
+                  className={`px-4 py-2 rounded-lg font-medium transition-all
+                    ${selectedCategoryFilter === 'all'
+                      ? 'bg-gray-800 text-white shadow-md'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                >
+                  All Categories
+                </button>
+                {verifierCategories.map(catId => {
+                  const category = categories.find(c => c.id === catId);
+                  if (!category) return null;
+                  return (
+                    <button
+                      key={catId}
+                      onClick={() => setSelectedCategoryFilter(catId)}
+                      className={`px-4 py-2 rounded-lg font-medium transition-all flex items-center space-x-2
+                        ${selectedCategoryFilter === catId
+                          ? `bg-gradient-to-r ${getCategoryColorClass(catId)} text-white shadow-md`
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        }`}
+                    >
+                      <span>{category.icon}</span>
+                      <span>{category.name}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
 
         {loading ? (
@@ -219,8 +438,19 @@ export default function Verification() {
               All Caught Up!
             </h3>
             <p className="text-gray-600 mb-6 max-w-md mx-auto">
-              There are no pending verification requests at the moment. Great job keeping up with verifications!
+              {selectedCategoryFilter !== 'all' 
+                ? `No pending verification requests in ${getCategoryName(selectedCategoryFilter)} category.`
+                : 'There are no pending verification requests at the moment. Great job keeping up with verifications!'
+              }
             </p>
+            {selectedCategoryFilter !== 'all' && (
+              <button
+                onClick={() => setSelectedCategoryFilter('all')}
+                className="btn-primary"
+              >
+                View All Categories
+              </button>
+            )}
           </div>
         ) : (
           <div className="space-y-4">
@@ -229,16 +459,22 @@ export default function Verification() {
                 <div className="flex justify-between items-start">
                   <div className="flex-1">
                     <div className="flex items-center space-x-3 mb-3">
-                      <h3 className="text-xl font-bold text-gray-900">
-                        {request.courseTitle}
+                      {request.category && (
+                        <div className={`flex items-center text-sm font-medium text-white px-3 py-1 rounded-full bg-gradient-to-r ${getCategoryColorClass(request.category)}`}>
+                          <span className="mr-1.5 text-base">{getCategoryIcon(request.category)}</span>
+                          <span>{getCategoryName(request.category)}</span>
+                        </div>
+                      )}
+                      <h3 className="text-xl font-bold text-gray-900 flex-1">
+                        {request.title}
                       </h3>
-                      <span className="bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-sm font-semibold">
-                        ⏳ Pending Review
+                      <span className="bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-sm font-semibold whitespace-nowrap">
+                        ⏳ Pending
                       </span>
                     </div>
                     
                     <p className="text-gray-600 text-sm mb-4">
-                      {request.courseDescription}
+                      {request.description}
                     </p>
 
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4 bg-gray-50 p-3 rounded-lg">
@@ -249,9 +485,9 @@ export default function Verification() {
                         </p>
                       </div>
                       <div>
-                        <p className="text-xs text-gray-500 mb-1">Lessons</p>
-                        <p className="text-sm font-semibold text-gray-900">
-                          {request.lessonsCount} completed
+                        <p className="text-xs text-gray-500 mb-1">Type</p>
+                        <p className="text-sm font-semibold text-gray-900 capitalize">
+                          {request.type === 'achievement' ? '🎯 Achievement' : '📚 Course'}
                         </p>
                       </div>
                       <div>
@@ -273,7 +509,7 @@ export default function Verification() {
                         <div className="flex items-start justify-between">
                           <div className="flex-1">
                             <p className="text-xs font-semibold text-blue-900 mb-1">
-                              📝 Proof of Completion:
+                              📝 Proof Description:
                             </p>
                             <p className="text-sm text-blue-800 line-clamp-2">
                               {request.proofOfCompletion}
@@ -311,13 +547,24 @@ export default function Verification() {
 
       {/* Review Detail Modal */}
       {selectedRequest && !showRejectModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-white rounded-xl max-w-3xl w-full my-8 shadow-2xl">
             <div className="p-6">
               <div className="flex justify-between items-start mb-6">
-                <div>
+                <div className="flex-1">
+                  <div className="flex items-center space-x-3 mb-2">
+                    {selectedRequest.category && (
+                      <div className={`flex items-center text-sm font-medium text-white px-3 py-1.5 rounded-full bg-gradient-to-r ${getCategoryColorClass(selectedRequest.category)}`}>
+                        <span className="mr-1.5 text-lg">{getCategoryIcon(selectedRequest.category)}</span>
+                        <span>{getCategoryName(selectedRequest.category)}</span>
+                      </div>
+                    )}
+                    <span className="text-gray-500 text-sm capitalize">
+                      {selectedRequest.type === 'achievement' ? '🎯 Achievement' : '📚 Course'}
+                    </span>
+                  </div>
                   <h3 className="text-2xl font-bold text-gray-900 mb-1">
-                    Review Course Completion
+                    Review Submission
                   </h3>
                   <p className="text-gray-600">
                     Carefully review all details before making a decision
@@ -325,36 +572,38 @@ export default function Verification() {
                 </div>
                 <button
                   onClick={() => setSelectedRequest(null)}
-                  className="text-gray-400 hover:text-gray-600 text-2xl"
+                  className="text-gray-400 hover:text-gray-600 text-2xl ml-4"
                 >
                   ✕
                 </button>
               </div>
 
-              <div className="space-y-6 mb-6">
+              <div className="space-y-4 mb-6 max-h-[60vh] overflow-y-auto pr-2">
                 <div className="bg-gradient-to-r from-primary-50 to-blue-50 border border-primary-200 rounded-lg p-4">
-                  <h4 className="font-semibold text-primary-900 mb-2">Course Information</h4>
+                  <h4 className="font-semibold text-primary-900 mb-2">
+                    {selectedRequest.type === 'achievement' ? '🎯 Achievement' : '📚 Course'} Information
+                  </h4>
                   <div className="space-y-2">
                     <div>
                       <span className="text-sm font-medium text-primary-700">Title:</span>
-                      <p className="text-primary-900 font-semibold">{selectedRequest.courseTitle}</p>
+                      <p className="text-primary-900 font-semibold">{selectedRequest.title}</p>
                     </div>
                     <div>
                       <span className="text-sm font-medium text-primary-700">Description:</span>
-                      <p className="text-primary-900">{selectedRequest.courseDescription}</p>
+                      <p className="text-primary-900">{selectedRequest.description}</p>
                     </div>
-                    <div className="flex items-center space-x-4 pt-2">
-                      <span className="text-sm">
-                        <span className="font-medium text-primary-700">Lessons:</span>{" "}
-                        <span className="text-primary-900 font-semibold">{selectedRequest.lessonsCount}</span>
-                      </span>
-                      <span className="text-sm">
-                        <span className="font-medium text-primary-700">Course ID:</span>{" "}
-                        <span className="text-primary-900 font-mono text-xs">{selectedRequest.courseId}</span>
-                      </span>
-                    </div>
+                    {selectedRequest.lessonsCount && (
+                      <div className="flex items-center space-x-4 pt-2">
+                        <span className="text-sm">
+                          <span className="font-medium text-primary-700">Lessons:</span>{" "}
+                          <span className="text-primary-900 font-semibold">{selectedRequest.lessonsCount}</span>
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
+
+                {renderSpecificData(selectedRequest)}
 
                 <div className="bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-lg p-4">
                   <h4 className="font-semibold text-purple-900 mb-2">Student Information</h4>
@@ -376,7 +625,7 @@ export default function Verification() {
 
                 {selectedRequest.proofOfCompletion && (
                   <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-lg p-4">
-                    <h4 className="font-semibold text-green-900 mb-2">📝 Proof of Completion - Description</h4>
+                    <h4 className="font-semibold text-green-900 mb-2">📝 Proof Description</h4>
                     <p className="text-green-900 whitespace-pre-wrap">
                       {selectedRequest.proofOfCompletion}
                     </p>
@@ -385,7 +634,7 @@ export default function Verification() {
 
                 {selectedRequest.proofImage && (
                   <div className="bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-200 rounded-lg p-4">
-                    <h4 className="font-semibold text-indigo-900 mb-3">📸 Proof of Completion - Image</h4>
+                    <h4 className="font-semibold text-indigo-900 mb-3">📸 Proof Image</h4>
                     <div className="relative bg-white rounded-lg overflow-hidden border-2 border-indigo-200">
                       <img 
                         src={selectedRequest.proofImage} 
@@ -437,7 +686,7 @@ export default function Verification() {
                   className="flex-1 bg-gradient-to-r from-red-500 to-pink-600 hover:from-red-600 hover:to-pink-700 text-white font-bold py-4 px-6 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
                 >
                   <span>❌</span>
-                  <span>Reject Request</span>
+                  <span>Reject</span>
                 </button>
                 <button
                   onClick={() => handleVerify(selectedRequest)}
@@ -485,7 +734,7 @@ export default function Verification() {
                 <textarea
                   value={rejectionReason}
                   onChange={(e) => setRejectionReason(e.target.value)}
-                  placeholder="Please provide specific feedback on why this course doesn't meet verification requirements. Be constructive and specific so the student can improve and resubmit..."
+                  placeholder="Please provide specific feedback on why this submission doesn't meet verification requirements. Be constructive and specific so the student can improve and resubmit..."
                   rows={6}
                   className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
                 />
