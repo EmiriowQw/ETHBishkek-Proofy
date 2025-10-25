@@ -47,7 +47,7 @@ export default function EnglishDemo() {
           throw new Error(ERROR_MESSAGES.FAILED_TO_LOAD);
         }
         return safeJsonParse(response);
-      });
+      }) as any;
       
       if (data.success) {
         setCourses(data.courses);

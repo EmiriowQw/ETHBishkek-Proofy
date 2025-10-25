@@ -16,7 +16,7 @@ export interface Course {
   certificate: boolean;
 }
 
-export interface CourseDetail extends Course {
+export interface CourseDetail extends Omit<Course, 'instructor'> {
   reviews: number;
   instructor: {
     name: string;

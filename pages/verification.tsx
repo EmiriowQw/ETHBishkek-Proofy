@@ -115,7 +115,7 @@ export default function Verification() {
     // Check if verifier can verify this category
     console.log("🔍 [VERIFY CHECK] Request category:", request.category);
     console.log("🔍 [VERIFY CHECK] Verifier categories:", verifierCategories);
-    console.log("🔍 [VERIFY CHECK] Can verify:", verifierCategories.includes(request.category));
+    console.log("🔍 [VERIFY CHECK] Can verify:", request.category && verifierCategories.includes(request.category));
     
     if (request.category && !verifierCategories.includes(request.category)) {
       toast.error(`You are not authorized to verify this category. Your categories: ${verifierCategories.join(', ')}`);

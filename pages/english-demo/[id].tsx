@@ -4,7 +4,7 @@ import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { useAccount } from 'wagmi';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
-import { CourseDetail } from '../../types/english-courses';
+import type { CourseDetail } from '../../types/english-courses';
 import { API_ENDPOINTS, ERROR_MESSAGES, SUCCESS_MESSAGES } from '../../constants/api';
 import { getLevelColor } from '../../utils/courseHelpers';
 import { handleApiError, fetchWithRetry, safeJsonParse } from '../../utils/errorHandler';
@@ -54,7 +54,7 @@ export default function CourseDetail() {
           throw new Error(ERROR_MESSAGES.FAILED_TO_LOAD);
         }
         return safeJsonParse(response);
-      });
+      }) as any;
       
       if (data.success) {
         setCourse(data.course);
@@ -106,7 +106,7 @@ export default function CourseDetail() {
         }
 
         return safeJsonParse(response);
-      });
+      }) as any;
       
       if (data.success) {
         toast.success(SUCCESS_MESSAGES.ENROLLMENT_SUCCESS);
