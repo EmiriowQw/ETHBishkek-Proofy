@@ -1,36 +1,53 @@
 import { NextApiRequest, NextApiResponse } from 'next';
+import { validateEnrollmentData } from '../../../utils/validators';
+import { generateEnrollmentId } from '../../../utils/courseHelpers';
+import { ERROR_MESSAGES, SUCCESS_MESSAGES } from '../../../constants/api';
 
-// API эндпоинт для записи на курс (демонстрация)
 export default function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method === 'POST') {
-    const { courseId, studentAddress, studentName } = req.body;
+  if (req.method !== 'POST') {
+    return res.status(405).json({ 
+      success: false, 
+      message: ERROR_MESSAGES.SERVER_ERROR 
+    });
+  }
+
+  try {
+    const { courseId, studentAddress } = req.body;
     
-    // Валидация
-    if (!courseId || !studentAddress) {
+    // Валидация данных
+    const validation = validateEnrollmentData({ courseId, studentAddress });
+    
+    if (!validation.isValid) {
       return res.status(400).json({
         success: false,
-        message: 'courseId and studentAddress are required',
+        message: validation.errors.join(', '),
       });
     }
     
+    // Генерация enrollment
+    const enrollmentId = generateEnrollmentId(courseId, studentAddress);
+    
     // Симуляция записи на курс
-    console.log('Enrollment request:', { courseId, studentAddress, studentName });
+    console.log('✅ Enrollment successful:', { courseId, studentAddress });
     
     // Успешный ответ
     return res.status(200).json({
       success: true,
-      message: 'Successfully enrolled in course',
+      message: SUCCESS_MESSAGES.ENROLLMENT_SUCCESS,
       enrollment: {
-        enrollmentId: `enr_${Date.now()}`,
+        id: enrollmentId,
         courseId,
         studentAddress,
         enrolledAt: new Date().toISOString(),
-        progress: 0,
-        status: 'active',
+        status: 'active' as const,
       },
     });
+  } catch (error) {
+    console.error('Error enrolling in course:', error);
+    return res.status(500).json({
+      success: false,
+      message: ERROR_MESSAGES.FAILED_TO_ENROLL,
+    });
   }
-  
-  res.status(405).json({ success: false, message: 'Method not allowed' });
 }
 

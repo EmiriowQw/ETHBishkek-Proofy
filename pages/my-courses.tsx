@@ -4,6 +4,7 @@ import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useRouter } from "next/router";
 import Link from "next/link";
 import toast from "react-hot-toast";
+import ImageUpload from "../components/ImageUpload";
 
 interface Course {
   id: string;
@@ -27,6 +28,7 @@ export default function MyCourses() {
   const [showSubmitModal, setShowSubmitModal] = useState(false);
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
   const [proofOfCompletion, setProofOfCompletion] = useState("");
+  const [proofImage, setProofImage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const router = useRouter();
 
@@ -59,8 +61,13 @@ export default function MyCourses() {
   const handleSubmitForVerification = async () => {
     if (!selectedCourse) return;
 
-    if (!proofOfCompletion.trim()) {
-      toast.error("Please provide proof of completion");
+    if (!proofOfCompletion.trim() || proofOfCompletion.trim().length < 50) {
+      toast.error("Please provide proof of completion (minimum 50 characters)");
+      return;
+    }
+
+    if (!proofImage) {
+      toast.error("Please upload proof image (screenshot, certificate, etc.)");
       return;
     }
 
@@ -77,6 +84,7 @@ export default function MyCourses() {
           courseId: selectedCourse.id,
           studentAddress: address,
           proofOfCompletion: proofOfCompletion.trim(),
+          proofImage: proofImage,
         }),
       });
 
@@ -93,6 +101,7 @@ export default function MyCourses() {
 
       setShowSubmitModal(false);
       setProofOfCompletion("");
+      setProofImage(null);
       setSelectedCourse(null);
       loadCourses();
     } catch (error: any) {
@@ -103,11 +112,40 @@ export default function MyCourses() {
     }
   };
 
-  const handleClaimCertificate = (course: Course) => {
-    toast.success(`Claiming NFT certificate for: ${course.title}`, {
-      duration: 3000,
-    });
-    router.push(`/my-certificates`);
+  const handleClaimCertificate = async (course: Course) => {
+    toast.loading("Claiming your NFT certificate...", { id: "claim" });
+
+    try {
+      const response = await fetch("/api/certificates/claim", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          courseId: course.id,
+          studentAddress: address,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to claim certificate");
+      }
+
+      toast.success("🎓 NFT Certificate claimed successfully!", { id: "claim" });
+      toast.success(`Token ID: ${data.data.certificate.tokenId}`, {
+        duration: 5000,
+        icon: "🎫",
+      });
+
+      setTimeout(() => {
+        router.push(`/my-certificates`);
+      }, 1000);
+    } catch (error: any) {
+      console.error("Error claiming certificate:", error);
+      toast.error(error.message || "Failed to claim certificate", { id: "claim" });
+    }
   };
 
   const getStatusBadge = (status: string) => {
@@ -372,6 +410,7 @@ export default function MyCourses() {
                     setShowSubmitModal(false);
                     setSelectedCourse(null);
                     setProofOfCompletion("");
+                    setProofImage(null);
                   }}
                   className="text-gray-400 hover:text-gray-600 text-2xl"
                 >
@@ -389,16 +428,16 @@ export default function MyCourses() {
                 </ul>
               </div>
 
-              <div className="space-y-4 mb-6">
+              <div className="space-y-6 mb-6">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Proof of Completion *
+                    Proof of Completion - Description *
                   </label>
                   <textarea
                     value={proofOfCompletion}
                     onChange={(e) => setProofOfCompletion(e.target.value)}
                     placeholder="Describe what you learned and accomplished in this course. Include key concepts, projects completed, or skills gained..."
-                    rows={6}
+                    rows={4}
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                   />
                   <p className="text-xs text-gray-500 mt-1">
@@ -406,10 +445,25 @@ export default function MyCourses() {
                   </p>
                 </div>
 
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-3">
+                    Proof of Completion - Image/Screenshot *
+                  </label>
+                  <ImageUpload 
+                    onImageChange={setProofImage}
+                    maxSizeMB={5}
+                  />
+                </div>
+
                 <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-                  <p className="text-amber-900 text-sm">
-                    ⚠️ Make sure all course content is complete and accurate before submitting
+                  <p className="text-amber-900 text-sm font-medium mb-1">
+                    ⚠️ Required for Verification:
                   </p>
+                  <ul className="text-amber-800 text-xs space-y-1 ml-4">
+                    <li>• Detailed description of your learning (min 50 chars)</li>
+                    <li>• Visual proof (screenshot/certificate/project)</li>
+                    <li>• Ensure all content is complete and accurate</li>
+                  </ul>
                 </div>
               </div>
 
@@ -419,6 +473,7 @@ export default function MyCourses() {
                     setShowSubmitModal(false);
                     setSelectedCourse(null);
                     setProofOfCompletion("");
+                    setProofImage(null);
                   }}
                   className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-3 px-4 rounded-lg transition-colors"
                 >
@@ -426,7 +481,7 @@ export default function MyCourses() {
                 </button>
                 <button
                   onClick={handleSubmitForVerification}
-                  disabled={isSubmitting || proofOfCompletion.trim().length < 50}
+                  disabled={isSubmitting || proofOfCompletion.trim().length < 50 || !proofImage}
                   className="flex-1 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white font-semibold py-3 px-4 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isSubmitting ? "Submitting..." : "Submit for Verification"}

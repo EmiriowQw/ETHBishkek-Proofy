@@ -13,6 +13,7 @@ interface VerificationRequest {
   studentName?: string;
   lessonsCount: number;
   proofOfCompletion: string;
+  proofImage?: string | null;
   submittedAt: Date;
   status: "pending" | "verified" | "rejected";
 }
@@ -76,8 +77,16 @@ export default function Verification() {
         throw new Error(data.error || "Failed to verify");
       }
 
-      toast.success("✅ Course verified! NFT certificate will be minted.", { id: "verify" });
-      toast.success(`Student ${request.studentAddress.slice(0, 6)}...${request.studentAddress.slice(-4)} will receive their certificate`, {
+      toast.success("✅ Course verified! NFT certificate minted successfully.", { id: "verify" });
+      
+      if (data.data?.tokenId) {
+        toast.success(`🎫 NFT Token ID: ${data.data.tokenId} issued to student`, {
+          duration: 7000,
+          icon: "🎓",
+        });
+      }
+      
+      toast.success(`Student ${request.studentAddress.slice(0, 6)}...${request.studentAddress.slice(-4)} can now claim their certificate`, {
         duration: 5000,
       });
 
@@ -261,12 +270,26 @@ export default function Verification() {
 
                     {request.proofOfCompletion && (
                       <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
-                        <p className="text-xs font-semibold text-blue-900 mb-1">
-                          📝 Proof of Completion:
-                        </p>
-                        <p className="text-sm text-blue-800">
-                          {request.proofOfCompletion}
-                        </p>
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <p className="text-xs font-semibold text-blue-900 mb-1">
+                              📝 Proof of Completion:
+                            </p>
+                            <p className="text-sm text-blue-800 line-clamp-2">
+                              {request.proofOfCompletion}
+                            </p>
+                          </div>
+                          {request.proofImage && (
+                            <div className="ml-3 flex-shrink-0">
+                              <span className="bg-indigo-100 text-indigo-800 text-xs font-semibold px-2 py-1 rounded-full flex items-center">
+                                <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd" />
+                                </svg>
+                                Image
+                              </span>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     )}
                   </div>
@@ -353,9 +376,38 @@ export default function Verification() {
 
                 {selectedRequest.proofOfCompletion && (
                   <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-lg p-4">
-                    <h4 className="font-semibold text-green-900 mb-2">📝 Proof of Completion</h4>
+                    <h4 className="font-semibold text-green-900 mb-2">📝 Proof of Completion - Description</h4>
                     <p className="text-green-900 whitespace-pre-wrap">
                       {selectedRequest.proofOfCompletion}
+                    </p>
+                  </div>
+                )}
+
+                {selectedRequest.proofImage && (
+                  <div className="bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-200 rounded-lg p-4">
+                    <h4 className="font-semibold text-indigo-900 mb-3">📸 Proof of Completion - Image</h4>
+                    <div className="relative bg-white rounded-lg overflow-hidden border-2 border-indigo-200">
+                      <img 
+                        src={selectedRequest.proofImage} 
+                        alt="Proof of completion" 
+                        className="w-full h-auto max-h-96 object-contain"
+                      />
+                      <div className="absolute top-2 right-2">
+                        <a 
+                          href={selectedRequest.proofImage}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="bg-white/90 hover:bg-white text-indigo-700 p-2 rounded-lg shadow-lg transition-colors inline-flex items-center text-sm font-medium"
+                        >
+                          <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
+                          </svg>
+                          View Full Size
+                        </a>
+                      </div>
+                    </div>
+                    <p className="text-xs text-indigo-700 mt-2">
+                      Click image to view full size • Check for authenticity and quality
                     </p>
                   </div>
                 )}
@@ -364,10 +416,13 @@ export default function Verification() {
                   <h4 className="font-semibold text-amber-900 mb-2">⚡ What Happens Next?</h4>
                   <div className="space-y-1 text-sm">
                     <p className="text-amber-800">
-                      <span className="font-semibold">✅ If Verified:</span> NFT certificate will be minted automatically (gasless)
+                      <span className="font-semibold">✅ If Verified:</span> A unique NFT certificate will be minted automatically (gasless) and sent to the student's wallet
                     </p>
                     <p className="text-amber-800">
-                      <span className="font-semibold">❌ If Rejected:</span> Student will be notified with your feedback
+                      <span className="font-semibold">❌ If Rejected:</span> Student will be notified with your detailed feedback and can resubmit
+                    </p>
+                    <p className="text-amber-800 mt-2 pt-2 border-t border-amber-300">
+                      <span className="font-semibold">🎫 NFT Token:</span> Each verified certificate gets a unique token ID on the blockchain
                     </p>
                   </div>
                 </div>

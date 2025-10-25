@@ -27,6 +27,7 @@ app.get("/health", (req, res) => {
 // Mock data storage
 const mockCourses: any[] = [];
 const mockVerificationRequests: any[] = [];
+const mockCertificates: any[] = [];
 
 // API Routes for Courses
 app.post("/api/courses/create", (req, res) => {
@@ -180,18 +181,118 @@ app.post("/api/certificates/mint", async (req, res) => {
   }
 });
 
-app.get("/api/certificates/user/:userId", (req, res) => {
-  // Mock certificates
+// Certificate endpoints
+app.post("/api/certificates/claim", async (req, res) => {
+  try {
+    const { courseId, studentAddress } = req.body;
+
+    if (!courseId || !studentAddress) {
+      return res.status(400).json({
+        success: false,
+        error: "Missing required fields: courseId, studentAddress",
+      });
+    }
+
+    const course = mockCourses.find(c => c.id === courseId);
+    if (!course) {
+      return res.status(404).json({
+        success: false,
+        error: "Course not found",
+      });
+    }
+
+    if (course.status !== "verified") {
+      return res.status(400).json({
+        success: false,
+        error: "Course must be verified before claiming certificate",
+      });
+    }
+
+    // Check if certificate already claimed
+    const existingCert = mockCertificates.find(
+      c => c.courseId === courseId && c.studentAddress.toLowerCase() === studentAddress.toLowerCase()
+    );
+    
+    if (existingCert) {
+      return res.json({
+        success: true,
+        message: "Certificate already claimed",
+        data: { certificate: existingCert },
+      });
+    }
+
+    // Mint NFT certificate
+    const tokenId = course.nftTokenId || Math.floor(Math.random() * 10000).toString();
+    const tokenURI = course.nftTokenURI || `https://ipfs.io/ipfs/mock-${tokenId}`;
+    const txHash = course.nftTxHash || `0x${Math.random().toString(16).substr(2, 64)}`;
+
+    const certificate = {
+      id: `cert_${Date.now()}`,
+      tokenId,
+      tokenURI,
+      txHash,
+      courseId,
+      courseName: course.title,
+      courseDescription: course.description,
+      studentAddress,
+      studentName: `Student ${studentAddress.slice(0, 6)}`,
+      completionDate: new Date().toISOString(),
+      claimedAt: new Date().toISOString(),
+      network: "Status Sepolia",
+      gasless: true,
+    };
+
+    mockCertificates.push(certificate);
+    course.certificateClaimed = true;
+    course.certificateClaimedAt = new Date().toISOString();
+
+    console.log(`🎓 [BACKEND] Certificate claimed: ${certificate.id}`);
+    console.log(`🎓 [BACKEND] Token ID: ${tokenId}`);
+    console.log(`🎓 [BACKEND] Course: ${course.title}`);
+    console.log(`🎓 [BACKEND] Student: ${studentAddress}`);
+    console.log(`🎓 [BACKEND] Total certificates: ${mockCertificates.length}`);
+
+    res.json({
+      success: true,
+      message: "Certificate claimed successfully",
+      data: { certificate },
+    });
+  } catch (error: any) {
+    console.error(`❌ [BACKEND] Error claiming certificate:`, error);
+    res.status(500).json({
+      success: false,
+      error: error.message || "Failed to claim certificate",
+    });
+  }
+});
+
+app.get("/api/certificates/user/:address", (req, res) => {
+  const { address } = req.params;
+  
+  if (!address) {
+    return res.status(400).json({
+      success: false,
+      error: "Address is required",
+    });
+  }
+
+  const userCertificates = mockCertificates.filter(
+    c => c.studentAddress.toLowerCase() === address.toLowerCase()
+  );
+
+  console.log(`🎓 [BACKEND] Fetching certificates for: ${address}`);
+  console.log(`🎓 [BACKEND] Found: ${userCertificates.length} certificates`);
+
   res.json({
     success: true,
-    data: [],
+    certificates: userCertificates,
   });
 });
 
 // API Routes for Verification
 app.post("/api/courses/submit-verification", (req, res) => {
   try {
-    const { courseId, studentAddress, proofOfCompletion } = req.body;
+    const { courseId, studentAddress, proofOfCompletion, proofImage } = req.body;
     
     const course = mockCourses.find(c => c.id === courseId);
     if (!course) {
@@ -214,6 +315,7 @@ app.post("/api/courses/submit-verification", (req, res) => {
       studentAddress,
       lessonsCount: course.lessonsCount,
       proofOfCompletion: proofOfCompletion || "Course completed",
+      proofImage: proofImage || null,
       submittedAt: new Date().toISOString(),
       status: "pending",
     };
@@ -223,6 +325,7 @@ app.post("/api/courses/submit-verification", (req, res) => {
     console.log(`📋 [BACKEND] Verification request created: ${verificationRequest.id}`);
     console.log(`📋 [BACKEND] Course: ${course.title}`);
     console.log(`📋 [BACKEND] Student: ${studentAddress}`);
+    console.log(`📋 [BACKEND] Has proof image: ${!!proofImage}`);
     console.log(`📋 [BACKEND] Total pending requests: ${mockVerificationRequests.filter(r => r.status === 'pending').length}`);
 
     res.json({
@@ -290,12 +393,19 @@ app.post("/api/verification/verify", async (req, res) => {
       }
     }
 
-    // If verified, mint NFT certificate
+    // If verified, prepare NFT certificate data
     if (status === "verified") {
       // Simulate NFT minting
       const tokenId = Math.floor(Math.random() * 10000).toString();
       const tokenURI = `https://ipfs.io/ipfs/mock-${tokenId}`;
       const txHash = `0x${Math.random().toString(16).substr(2, 64)}`;
+
+      // Store NFT data in course for claiming later
+      if (course) {
+        course.nftTokenId = tokenId;
+        course.nftTokenURI = tokenURI;
+        course.nftTxHash = txHash;
+      }
 
       res.json({
         success: true,

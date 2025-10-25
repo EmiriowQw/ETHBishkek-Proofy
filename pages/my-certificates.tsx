@@ -1,21 +1,27 @@
 import { useState, useEffect } from "react";
 import { useAccount } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { useCertificateNFT } from "../hooks/useCertificateNFT";
-import CertificateCard from "../components/CertificateCard";
+import Link from "next/link";
+import toast from "react-hot-toast";
 
 interface Certificate {
+  id: string;
   tokenId: string;
+  tokenURI: string;
+  txHash: string;
   courseId: string;
   courseName: string;
+  courseDescription: string;
+  studentAddress: string;
   studentName: string;
-  completionDate: Date;
-  tokenURI: string;
+  completionDate: string;
+  claimedAt: string;
+  network: string;
+  gasless: boolean;
 }
 
 export default function MyCertificates() {
   const { address, isConnected } = useAccount();
-  const { getUserCertificates, getCertificateData } = useCertificateNFT();
   const [certificates, setCertificates] = useState<Certificate[]>([]);
   const [loading, setLoading] = useState(true);
   const [mounted, setMounted] = useState(false);
@@ -27,6 +33,8 @@ export default function MyCertificates() {
   useEffect(() => {
     if (isConnected && address) {
       loadCertificates();
+    } else {
+      setLoading(false);
     }
   }, [isConnected, address]);
 
@@ -35,17 +43,17 @@ export default function MyCertificates() {
 
     setLoading(true);
     try {
-      const tokenIds = await getUserCertificates();
-      const certificateData = await Promise.all(
-        tokenIds.map(async (tokenId: string) => {
-          const data = await getCertificateData(tokenId);
-          return data ? { tokenId, ...data } : null;
-        })
-      );
+      const response = await fetch(`/api/certificates/user/${address}`);
       
-      setCertificates(certificateData.filter(Boolean) as Certificate[]);
+      if (response.ok) {
+        const data = await response.json();
+        setCertificates(data.certificates || []);
+      } else {
+        throw new Error("Failed to load certificates");
+      }
     } catch (error) {
       console.error("Error loading certificates:", error);
+      toast.error("Failed to load certificates");
     } finally {
       setLoading(false);
     }
@@ -77,9 +85,15 @@ export default function MyCertificates() {
         <div className="container mx-auto px-4 py-4 flex justify-between items-center">
           <h1 className="text-2xl font-bold text-primary-600">Proofy NFT</h1>
           <div className="flex items-center space-x-4">
-            <a href="/" className="text-gray-600 hover:text-primary-600">
-              Courses
-            </a>
+            <Link href="/" className="text-gray-600 hover:text-primary-600">
+              Dashboard
+            </Link>
+            <Link href="/my-courses" className="text-gray-600 hover:text-primary-600">
+              My Courses
+            </Link>
+            <Link href="/verification" className="text-gray-600 hover:text-primary-600">
+              Verification
+            </Link>
             <ConnectButton />
           </div>
         </div>
@@ -88,7 +102,7 @@ export default function MyCertificates() {
       <div className="container mx-auto px-4 py-8">
         <div className="mb-8">
           <h2 className="text-3xl font-bold text-gray-900 mb-2">
-            My Certificates
+            My NFT Certificates
           </h2>
           <p className="text-gray-600">
             Your blockchain-verified course completion certificates
@@ -107,24 +121,97 @@ export default function MyCertificates() {
             ))}
           </div>
         ) : certificates.length === 0 ? (
-          <div className="text-center py-12">
-            <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <span className="text-4xl">📜</span>
+          <div className="card text-center py-12">
+            <div className="w-24 h-24 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-full flex items-center justify-center mx-auto mb-6">
+              <span className="text-5xl">🎓</span>
             </div>
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">
+            <h3 className="text-2xl font-semibold text-gray-900 mb-3">
               No Certificates Yet
             </h3>
-            <p className="text-gray-600 mb-6">
-              Complete courses to earn your first NFT certificate
+            <p className="text-gray-600 mb-6 max-w-md mx-auto">
+              Complete and verify courses to earn your first NFT certificate. Your certificates will appear here once claimed.
             </p>
-            <a href="/" className="btn-primary">
-              Browse Courses
-            </a>
+            <Link href="/my-courses" className="btn-primary inline-block">
+              View My Courses
+            </Link>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {certificates.map((certificate) => (
-              <CertificateCard key={certificate.tokenId} certificate={certificate} />
+              <div key={certificate.id} className="card hover:shadow-xl transition-all duration-200">
+                <div className="bg-gradient-to-br from-purple-500 to-indigo-600 p-6 rounded-t-lg text-white">
+                  <div className="text-center mb-4">
+                    <div className="text-6xl mb-2">🎓</div>
+                    <h3 className="text-xl font-bold">Certificate of Completion</h3>
+                  </div>
+                </div>
+
+                <div className="p-6">
+                  <h4 className="text-lg font-bold text-gray-900 mb-2">
+                    {certificate.courseName}
+                  </h4>
+                  
+                  {certificate.courseDescription && (
+                    <p className="text-sm text-gray-600 mb-4 line-clamp-2">
+                      {certificate.courseDescription}
+                    </p>
+                  )}
+
+                  <div className="space-y-2 mb-4 text-sm">
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-600">Token ID:</span>
+                      <span className="font-mono font-semibold text-primary-600">
+                        #{certificate.tokenId}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-600">Network:</span>
+                      <span className="font-medium text-gray-900">{certificate.network}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-600">Completed:</span>
+                      <span className="font-medium text-gray-900">
+                        {new Date(certificate.completionDate).toLocaleDateString()}
+                      </span>
+                    </div>
+                  </div>
+
+                  {certificate.gasless && (
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-2 mb-4">
+                      <p className="text-xs text-green-800 font-medium text-center">
+                        ⚡ Gasless Mint - No fees paid
+                      </p>
+                    </div>
+                  )}
+
+                  <div className="flex gap-2">
+                    <a
+                      href={certificate.tokenURI}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex-1 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white text-center font-semibold py-2 px-4 rounded-lg transition-all text-sm"
+                    >
+                      View Metadata
+                    </a>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(certificate.txHash);
+                        toast.success("Transaction hash copied!");
+                      }}
+                      className="bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-2 px-4 rounded-lg transition-colors text-sm"
+                      title="Copy TX Hash"
+                    >
+                      📋
+                    </button>
+                  </div>
+
+                  <div className="mt-3 pt-3 border-t border-gray-100">
+                    <p className="text-xs text-gray-500 font-mono break-all">
+                      TX: {certificate.txHash.slice(0, 10)}...{certificate.txHash.slice(-8)}
+                    </p>
+                  </div>
+                </div>
+              </div>
             ))}
           </div>
         )}

@@ -1,43 +1,52 @@
-import React from 'react';
+import React, { useMemo, useCallback } from 'react';
 import { useRouter } from 'next/router';
+import { Course } from '../types/english-courses';
+import { getLevelColor, formatStudentCount } from '../utils/courseHelpers';
 
 interface EnglishCourseCardProps {
-  course: {
-    id: string;
-    title: string;
-    level: string;
-    description: string;
-    duration: string;
-    lessons: number;
-    students: number;
-    rating: number;
-    instructor: string;
-    price: string;
-    topics: string[];
-    image: string;
-    certificate: boolean;
-  };
+  course: Course;
 }
 
-export default function EnglishCourseCard({ course }: EnglishCourseCardProps) {
+function EnglishCourseCard({ course }: EnglishCourseCardProps) {
   const router = useRouter();
 
-  const getLevelColor = (level: string) => {
-    if (level.includes('A1')) return 'bg-green-100 text-green-800';
-    if (level.includes('A2')) return 'bg-blue-100 text-blue-800';
-    if (level.includes('B1')) return 'bg-yellow-100 text-yellow-800';
-    if (level.includes('B2')) return 'bg-orange-100 text-orange-800';
-    if (level.includes('C1')) return 'bg-red-100 text-red-800';
-    return 'bg-purple-100 text-purple-800';
-  };
+  // Мемоизация цвета уровня
+  const levelColorClass = useMemo(
+    () => getLevelColor(course.level),
+    [course.level]
+  );
+
+  // Мемоизация форматированного количества студентов
+  const formattedStudents = useMemo(
+    () => formatStudentCount(course.students),
+    [course.students]
+  );
+
+  // Мемоизация обработчика клика
+  const handleClick = useCallback(() => {
+    router.push(`/english-demo/${course.id}`);
+  }, [router, course.id]);
 
   return (
-    <div className="bg-white rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 overflow-hidden border border-gray-100 cursor-pointer transform hover:-translate-y-1"
-         onClick={() => router.push(`/english-demo/${course.id}`)}>
+    <div 
+      className="bg-white rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 overflow-hidden border border-gray-100 cursor-pointer transform hover:-translate-y-1"
+      onClick={handleClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          handleClick();
+        }
+      }}
+      aria-label={`View ${course.title} course`}
+    >
       {/* Header with emoji icon */}
       <div className="bg-gradient-to-br from-blue-500 to-indigo-600 p-6 text-center">
-        <div className="text-6xl mb-2">{course.image}</div>
-        <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${getLevelColor(course.level)}`}>
+        <div className="text-6xl mb-2" role="img" aria-label="Course icon">
+          {course.image}
+        </div>
+        <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${levelColorClass}`}>
           {course.level}
         </span>
       </div>
@@ -93,8 +102,8 @@ export default function EnglishCourseCard({ course }: EnglishCourseCardProps) {
         {/* Footer */}
         <div className="flex items-center justify-between pt-4 border-t border-gray-100">
           <div className="flex items-center text-sm text-gray-600">
-            <span className="mr-1">👥</span>
-            <span>{course.students.toLocaleString()} students</span>
+            <span className="mr-1" role="img" aria-label="Students">👥</span>
+            <span>{formattedStudents} students</span>
           </div>
           
           {course.certificate && (
@@ -115,4 +124,10 @@ export default function EnglishCourseCard({ course }: EnglishCourseCardProps) {
     </div>
   );
 }
+
+// Мемоизация компонента для предотвращения лишних ре-рендеров
+export default React.memo(EnglishCourseCard, (prevProps, nextProps) => {
+  // Сравниваем только ID курса, так как курсы статичны
+  return prevProps.course.id === nextProps.course.id;
+});
 
