@@ -256,25 +256,33 @@ export default function MyCertificates() {
                     </div>
                   )}
 
-                  <div className="flex gap-2">
-                    <a
-                      href={certificate.tokenURI}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex-1 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white text-center font-semibold py-2 px-4 rounded-lg transition-all text-sm"
+                  <div className="space-y-2">
+                    <Link
+                      href={`/certificates/${certificate.tokenId}`}
+                      className="block w-full bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700 text-white text-center font-semibold py-3 px-4 rounded-lg transition-all shadow-md hover:shadow-lg transform hover:-translate-y-0.5"
                     >
-                      View Metadata
-                    </a>
-                    <button
-                      onClick={() => {
-                        navigator.clipboard.writeText(certificate.txHash);
-                        toast.success("Transaction hash copied!");
-                      }}
-                      className="bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-2 px-4 rounded-lg transition-colors text-sm"
-                      title="Copy TX Hash"
-                    >
-                      📋
-                    </button>
+                      🔍 View Full Profile
+                    </Link>
+                    <div className="flex gap-2">
+                      <a
+                        href={certificate.tokenURI}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex-1 bg-blue-500 hover:bg-blue-600 text-white text-center font-semibold py-2 px-4 rounded-lg transition-all text-sm"
+                      >
+                        Metadata
+                      </a>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(certificate.txHash);
+                          toast.success("Transaction hash copied!");
+                        }}
+                        className="bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-2 px-4 rounded-lg transition-colors text-sm"
+                        title="Copy TX Hash"
+                      >
+                        📋
+                      </button>
+                    </div>
                   </div>
 
                   <div className="mt-3 pt-3 border-t border-gray-100">
