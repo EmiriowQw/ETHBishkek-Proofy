@@ -255,6 +255,17 @@ Comprehensive documentation included:
 - `SOURCE.md` - Hackathon source declaration
 - Plus 15+ technical documentation files
 
+### 📖 College Assignment Documentation
+
+For college assignment submission materials, see `docs/assignment/`:
+
+- **Research & Validation** - `docs/assignment/01-research-validation.md`
+- **Technical Assignment** - `docs/assignment/02-technical-assignment.md`
+- **Prompt Log** - `docs/assignment/prompt-log.md`
+- **Build Logs** - `docs/assignment/build-logs.md`
+- **Submission Checklist** - `docs/assignment/SUBMISSION_CHECKLIST.md`
+- **Notion Structure** - `docs/assignment/notion-structure/` (complete documentation structure)
+
 ---
 
 ## 🎨 Features Showcase
